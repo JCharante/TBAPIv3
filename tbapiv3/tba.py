@@ -23,7 +23,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
+import os
 from requests import get
+import json
 
 from .models import Team, Event, Match, Media, Robot, Award, District, Profile, Alliance, DistrictPoints, \
     Insights, Status, OPRs, Predictions, Rankings, DistrictRanking
@@ -45,13 +47,33 @@ class TBA:
         """
         self.auth_key = auth_key
 
-    def _get(self, url):
+    def _get(self, url, flush_cache=False):
         """
         Helper method: GET data from given URL on TBA's API.
         :param url: URL string to get data from.
         :return: Requested data in JSON format.
         """
-        return get(self.URL_PRE + url, headers={'X-TBA-Auth-Key': self.auth_key}).json()
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+        cache_path = dir_path + '/cache'
+        fs_url = url.replace('/', '_')
+        # Create Cache Directory
+        try:
+            os.mkdir(cache_path)
+        except FileExistsError:
+            pass
+        try:
+            if flush_cache:
+                raise FileNotFoundError()
+            print(f"Loading {url} from cache")
+            with open(f"{cache_path}/{fs_url}") as f:
+                data = json.load(f)
+                return data
+        except FileNotFoundError:
+            print(f"Had to fetch {url}")
+            data = get(self.URL_PRE + url, headers={'X-TBA-Auth-Key': self.auth_key}).json()
+            with open(f"{cache_path}/{fs_url}", 'w') as f:
+                json.dump(data, f)
+            return data
 
     @staticmethod
     def team_key(identifier):
@@ -345,7 +367,7 @@ class TBA:
         """
         return [Award(raw) for raw in self._get('event/%s/awards' % event)]
 
-    def event_matches(self, event, keys=False, simple=False):
+    def event_matches(self, event, keys=False, simple=False, flush_cache=False):
         """
         Get list of matches played at an event.
 
@@ -356,9 +378,9 @@ class TBA:
         :return: List of string keys or Match objects.
         """
         if keys:
-            return self._get('event/%s/matches/keys' % event)
+            return self._get('event/%s/matches/keys' % event, flush_cache=flush_cache)
         else:
-            return [Match(raw) for raw in self._get('event/%s/matches%s' % (event, '/simple' if simple else ''))]
+            return [Match(raw) for raw in self._get('event/%s/matches%s' % (event, '/simple' if simple else ''), flush_cache=flush_cache)]
 
     def districts(self, year):
         """
